@@ -1,15 +1,22 @@
 class RMAPI {
-    constructor (key) {
+    constructor (key, host, isDebugMode) {
+        this.isDebugMode = isDebugMode;
         this.key = key;
         this.userData = {};
         this.urls = {
-            current: 'https://rm.innomdc.com/users/current.json',
-            issues: 'https://rm.innomdc.com/issues.json'
+            current: host + 'users/current.json',
+            issues: host + 'issues.json'
         };
     }
 
     init (callback) {
         this.updateAccountInfo(callback);
+    }
+
+    debug (message) {
+        if (this.isDebugMode) {
+            console.log(message);
+        }
     }
 
     getUrl (name, params) {
@@ -28,8 +35,10 @@ class RMAPI {
     }
 
     request (url, callback) {
-        const rq = new XMLHttpRequest();
+        const rq = new XMLHttpRequest(),
+            self = this;
 
+        this.debug('Request url: ' + url);
         rq.open('GET', url, true);
         rq.setRequestHeader('X-Redmine-API-Key', this.key);
 
@@ -42,6 +51,8 @@ class RMAPI {
                     result = {};
                 }
 
+                self.debug('Response with status code ' + this.status);
+
                 return callback(this.status !== 200, result);
             }
         });
@@ -50,7 +61,8 @@ class RMAPI {
     }
 
     updateAccountInfo (callback) {
-        const userData = this.userData;
+        const userData = this.userData,
+            self = this;
         this.request(this.getUrl('current'), function (error, data) {
             if (error || !data.user) {
                 throw new Error('Incorrect user data');
@@ -61,6 +73,8 @@ class RMAPI {
             userData.id = user.id;
             userData.login = user.login;
             userData.name = user.firstname + ' ' + user.lastname;
+
+            self.debug('User data updated successfully');
             callback();
         });
     }
@@ -111,13 +125,17 @@ class Notifier {
 }
 
 class App {
-    constructor () {
+    constructor (config, isDebugMode) {
         const self = this;
-        this.api = new RMAPI('APIKEY');
+
+        this.isDebugMode = isDebugMode;
+        this.api = new RMAPI(config.apikey, config.host, this.isDebugMode);
         this.notifier = new Notifier();
         this.api.init(function () {
             self.start();
         });
+
+        this.debug = this.api.debug;
     }
 
     start () {
@@ -140,9 +158,23 @@ class App {
                 self.notifier.notifyAboutNewAAIssues(data.total_count - self.aaCount);
             }
 
+            self.debug(`AA: ${data.total_count}, New: ${data.total_count - self.aaCount}`);
             self.aaCount = data.total_count;
         });
     }
 }
 
-const app = new App();
+function starter () {
+    chrome.storage.sync.get([
+        'host',
+        'apikey'
+    ], function (items) {
+        if (items.host && items.apikey) {
+            const app = new App(items, true);
+        } else {
+            setTimeout(starter, 5000);
+        }
+    });
+}
+
+starter();

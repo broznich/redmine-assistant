@@ -3,13 +3,25 @@
     "version": "0.1",
     "description": "Awesome extension",
     "manifest_version": 2,
-    "app": {
-        "background": {
-            "scripts": [ "background.js" ]
-        }
+    "options_ui": {
+        "page": "options.html"
+    },
+    "icons": {
+        "16": "icons/ico.png",
+        "64": "icons/ico.png"
+    },
+    "browser_action": {
+        "default_icon": {
+            "64": "icons/ico.png"
+        },
+        "default_title": "Redmine Assistant"
+    },
+    "background": {
+        "scripts": [ "background.js" ]
     },
     "permissions": [
         "notifications",
+        "storage",
         "https://rm.innomdc.com/*"
     ]
 }
