@@ -3,9 +3,10 @@ class RMAPI {
         this.isDebugMode = isDebugMode;
         this.key = key;
         this.userData = {};
+
         this.urls = {
-            current: host + 'users/current.json',
-            issues: host + 'issues.json'
+            current: host + 'users/current',
+            issues: host + 'issues'
         };
     }
 
@@ -19,8 +20,14 @@ class RMAPI {
         }
     }
 
-    getUrl (name, params) {
-        return this.urls[name] + '?' + this.stringifyParams(params);
+    getUrl (name, params = {}) {
+        const type = params.type;
+
+        if (type) {
+            delete params.type;
+        }
+
+        return this.urls[name] + (type ? '.' + type : '.json') + '?' + this.stringifyParams(params);
     }
 
     stringifyParams (params = {}) {
@@ -65,7 +72,7 @@ class RMAPI {
             self = this;
         this.request(this.getUrl('current'), function (error, data) {
             if (error || !data.user) {
-                throw new Error('Incorrect user data');
+                return setTimeout(self.updateAccountInfo.bind(self, callback), 1000);
             }
 
             const user = data.user;
@@ -84,12 +91,18 @@ class RMAPI {
     }
 
     getAAIssues (callback) {
+        this.request(this.getAAIssuesUrl(), callback);
+    }
+
+    getAAIssuesUrl (params = {}) {
         const user = this.getAccountInfo();
-        this.request(this.getUrl('issues', {
+        params = Object.assign({
             assigned_to_id: user.id,
             status_id: 10,
             limit: 100
-        }), callback);
+        }, params);
+
+        return this.getUrl('issues', params);
     }
 }
 
@@ -97,6 +110,7 @@ class Notifier {
     notify (message) {
         switch (Notification.permission) {
             case 'denied':
+                console.warn('Not enought permissions to notify');
                 return;
             case 'granted':
                 return this._notify(message);
@@ -106,7 +120,7 @@ class Notifier {
     }
 
     requestPermissionAndNotify (message) {
-        var self = this;
+        const self = this;
         Notification.requestPermission(function () {
             self.notify(message);
         });
@@ -122,12 +136,17 @@ class Notifier {
     notifyAboutNewAAIssues (message) {
         this.notify(`${message} new "Awaiting answer" issue(s)!`);
     }
+
+    notifyAboutAAIssues (message) {
+        this.notify(`${message} "Awaiting answer" issue(s)!`);
+    }
 }
 
 class App {
     constructor (config, isDebugMode) {
         const self = this;
 
+        this.aaCount = +config.count;
         this.isDebugMode = isDebugMode;
         this.api = new RMAPI(config.apikey, config.host, this.isDebugMode);
         this.notifier = new Notifier();
@@ -136,6 +155,9 @@ class App {
         });
 
         this.debug = this.api.debug;
+        this.firstRun = true;
+
+        this.initEvents();
     }
 
     start () {
@@ -143,7 +165,8 @@ class App {
     }
 
     checkAACount () {
-        if (!this.aaCount) {
+        // NaN, text or other except number
+        if (!this.aaCount > 0) {
             this.aaCount = 0;
         }
 
@@ -154,25 +177,56 @@ class App {
                 return;
             }
 
-            if (data.total_count > self.aaCount) {
-                self.notifier.notifyAboutNewAAIssues(data.total_count - self.aaCount);
+            const total = data.total_count;
+
+            if (total !== self.aaCount || self.firstRun) {
+                self.firstRun = false;
+                if (total > self.aaCount) {
+                    self.notifier.notifyAboutNewAAIssues(total - self.aaCount);
+                }
+
+                chrome.browserAction.setBadgeText({text: '' + total});
+                chrome.storage.sync.set({
+                    count: total
+                });
             }
 
-            self.debug(`AA: ${data.total_count}, New: ${data.total_count - self.aaCount}`);
-            self.aaCount = data.total_count;
+            if (total === 0) {
+                chrome.browserAction.setBadgeText({text: ''});
+            }
+
+            self.debug(`AA: ${total}, New: ${total - self.aaCount}`);
+            self.aaCount = total;
+        });
+    }
+
+    openAAIssues () {
+        chrome.tabs.create({
+            url: this.api.getAAIssuesUrl({
+                type: 'html'
+            })
+        });
+    }
+
+    initEvents () {
+        const self = this;
+        chrome.browserAction.onClicked.addListener(function () {
+            self.openAAIssues();
         });
     }
 }
 
 function starter () {
+    chrome.browserAction.setBadgeBackgroundColor({color: 'red'});
     chrome.storage.sync.get([
         'host',
-        'apikey'
+        'apikey',
+        'count'
     ], function (items) {
         if (items.host && items.apikey) {
             const app = new App(items, true);
         } else {
-            setTimeout(starter, 5000);
+            setTimeout(starter, 10000);
         }
     });
 }

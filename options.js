@@ -27,7 +27,7 @@ function getFieldValue (id) {
 
 function saveSettings () {
     const apikey = getFieldValue('apikey'),
-        host = getFieldValue('host');
+        host = fixHost(getFieldValue('host'));
 
     chrome.storage.sync.set({
         apikey: apikey,
@@ -36,6 +36,18 @@ function saveSettings () {
         console.log('OK');
         window.close();
     });
+}
+
+function fixHost (host) {
+    if (!(/^http[s]\:\/\//).test(host)) {
+        host = 'http://' + host;
+    }
+
+    if (!(/\/$/).test(host)) {
+        host += '/';
+    }
+
+    return host;
 }
 
 document.getElementById('save').addEventListener('click', saveSettings);
