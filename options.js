@@ -39,7 +39,7 @@ function saveSettings () {
 }
 
 function fixHost (host) {
-    if (!(/^http[s]\:\/\//).test(host)) {
+    if (!(/^http[s]?\:\/\//).test(host)) {
         host = 'http://' + host;
     }
 

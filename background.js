@@ -3,7 +3,15 @@ class RMAPI {
         this.isDebugMode = isDebugMode;
         this.key = key;
         this.userData = {};
+        this.updateHost(host);
+    }
 
+    updateConfig (config) {
+        this.key = config.apikey;
+        this.updateHost(config.host);
+    }
+
+    updateHost (host) {
         this.urls = {
             current: host + 'users/current',
             issues: host + 'issues'
@@ -60,7 +68,7 @@ class RMAPI {
 
                 self.debug('Response with status code ' + this.status);
 
-                return callback(this.status !== 200, result);
+                return callback(this.status !== 200 ? new Error('Status code: ' + this.status) : null, result);
             }
         });
 
@@ -72,7 +80,7 @@ class RMAPI {
             self = this;
         this.request(this.getUrl('current'), function (error, data) {
             if (error || !data.user) {
-                return setTimeout(self.updateAccountInfo.bind(self, callback), 1000);
+                return callback(error || new Error('Unknown user'));
             }
 
             const user = data.user;
@@ -144,24 +152,33 @@ class Notifier {
 
 class App {
     constructor (config, isDebugMode) {
-        const self = this;
-
         this.aaCount = +config.count;
+        this.settings = config;
         this.isDebugMode = isDebugMode;
         this.api = new RMAPI(config.apikey, config.host, this.isDebugMode);
         this.notifier = new Notifier();
-        this.api.init(function () {
-            self.start();
-        });
 
         this.debug = this.api.debug;
         this.firstRun = true;
 
         this.initEvents();
+        this.start();
     }
 
     start () {
-        this.interval = setInterval(this.checkAACount.bind(this), 5000);
+        const self = this;
+        this.api.init(function (error) {
+            if (error) {
+                return setTimeout(() => self.checkSettings(self.start.bind(self)), 5000);
+            }
+
+            self.startTimers();
+        });
+    }
+
+    startTimers () {
+        this.interval = setInterval(this.checkAACount.bind(this), 10000);
+        this.settingsInterval = setInterval(this.checkSettings.bind(this), 30000);
     }
 
     checkAACount () {
@@ -200,6 +217,23 @@ class App {
         });
     }
 
+    checkSettings (callback) {
+        const settings = this.settings,
+            api = this.api;
+        chrome.storage.sync.get([
+            'host',
+            'apikey'
+        ], function (items) {
+            if (settings.host !== items.host || settings.apikey !== items.apikey) {
+                api.updateConfig(items);
+            }
+
+            if (callback) {
+                return callback();
+            }
+        });
+    }
+
     openAAIssues () {
         chrome.tabs.create({
             url: this.api.getAAIssuesUrl({
@@ -217,7 +251,7 @@ class App {
 }
 
 function starter () {
-    chrome.browserAction.setBadgeBackgroundColor({color: 'red'});
+    chrome.browserAction.setBadgeBackgroundColor({color: [208, 0, 24, 255]});
     chrome.storage.sync.get([
         'host',
         'apikey',
