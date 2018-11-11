@@ -17,11 +17,14 @@
         "default_title": "Redmine Assistant"
     },
     "background": {
-        "scripts": [ "background.js" ]
+        "scripts": [ "background.js" ],
+        "persistent": false
     },
+
     "permissions": [
         "notifications",
         "storage",
+        "tabs",
         "https://rm.innomdc.com/*"
     ]
 }

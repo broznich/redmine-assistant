@@ -1,25 +1,42 @@
 
 chrome.storage.sync.get({
     apikey: null,
-    host: null
+    host: null,
+    issueFix: null
 }, function (items) {
     fillField('apikey', items.apikey);
     fillField('host', items.host);
+    fillField('issueFix', items.issueFix)
 });
 
 function fillField (id, value) {
     const el = document.getElementById(id);
 
-    if (el && value) {
-        el.value = value;
+    if (!el || !value) {
+        return;
+    }
+
+    switch (el.type) {
+        case 'checkbox':
+            el.checked = value;
+            break;
+        default:
+            el.value = value;
     }
 }
 
 function getFieldValue (id) {
     const el = document.getElementById(id);
 
-    if (el && el.value) {
-        return el.value;
+    if (!el) {
+        return;
+    }
+
+    switch (el.type) {
+        case 'checkbox':
+            return el.checked;
+        default:
+            return el.value;
     }
 
     return null;
@@ -27,13 +44,15 @@ function getFieldValue (id) {
 
 function saveSettings () {
     const apikey = getFieldValue('apikey'),
+        issueFix = getFieldValue('issueFix'),
         host = fixHost(getFieldValue('host'));
 
     chrome.storage.sync.set({
         apikey: apikey,
-        host: host
+        host: host,
+        issueFix: issueFix
     }, function () {
-        console.log('OK');
+        console.log('Saved successfull');
         window.close();
     });
 }

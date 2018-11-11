@@ -235,6 +235,7 @@ class App {
     }
 
     openAAIssues () {
+        console.log('Open AA');
         chrome.tabs.create({
             url: this.api.getAAIssuesUrl({
                 type: 'html'
@@ -250,19 +251,44 @@ class App {
     }
 }
 
+class PageModifier {
+    constructor (config) {
+        this.config = config;
+        this.subscribe();
+    }
+
+    subscribe () {
+        const hostRegex = new RegExp(`^${this.config.host}`);
+        chrome.tabs.onUpdated.addListener((tabId, page, config) => {
+            if (config.status === 'complete' && hostRegex.test(config.url)) {
+                chrome.tabs.executeScript(tabId, {
+                    file: 'contentScripts/decorateIssueId.js'
+                });
+            }
+        });
+    }
+}
+
 function starter () {
     chrome.browserAction.setBadgeBackgroundColor({color: [208, 0, 24, 255]});
     chrome.storage.sync.get([
         'host',
         'apikey',
-        'count'
+        'count',
+        'issueFix'
     ], function (items) {
         if (items.host && items.apikey) {
             const app = new App(items, true);
+
+            if (items.issueFix) {
+                const pageModifier = new PageModifier(items); 
+            }
         } else {
             setTimeout(starter, 10000);
         }
     });
+
+    
 }
 
 starter();

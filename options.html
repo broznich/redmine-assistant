@@ -10,9 +10,10 @@
         }
         label, input {
             display: inline-block;
+            vertical-align: top;
         }
         label {
-            width: 80px;
+            width: 180px;
         }
     </style>
   </head>
@@ -25,6 +26,10 @@
         <div>
             <label for="apikey">APIKEY</label>
             <input id="apikey" name="apikey" type="text" placeholder="apikey">
+        </div>
+        <div>
+            <label for="issueFix">Link to issue ID in content</label>
+            <input type="checkbox" name="issueFix" id="issueFix">
         </div>
         <input type="submit" value="Save" id="save">
     </form>
