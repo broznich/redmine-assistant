@@ -50,14 +50,13 @@ class RMAPI {
     }
 
     request (url, callback) {
-        const rq = new XMLHttpRequest(),
-            self = this;
+        const rq = new XMLHttpRequest();
 
         this.debug('Request url: ' + url);
         rq.open('GET', url, true);
         rq.setRequestHeader('X-Redmine-API-Key', this.key);
 
-        rq.addEventListener('readystatechange', function () {
+        rq.addEventListener('readystatechange', () => {
             if (this.readyState === 4) {
                 let result;
                 try {
@@ -66,7 +65,7 @@ class RMAPI {
                     result = {};
                 }
 
-                self.debug('Response with status code ' + this.status);
+                this.debug('Response with status code ' + this.status);
 
                 return callback(this.status !== 200 ? new Error('Status code: ' + this.status) : null, result);
             }
@@ -76,9 +75,8 @@ class RMAPI {
     }
 
     updateAccountInfo (callback) {
-        const userData = this.userData,
-            self = this;
-        this.request(this.getUrl('current'), function (error, data) {
+        const userData = this.userData;
+        this.request(this.getUrl('current'), (error, data) => {
             if (error || !data.user) {
                 return callback(error || new Error('Unknown user'));
             }
@@ -89,7 +87,7 @@ class RMAPI {
             userData.login = user.login;
             userData.name = user.firstname + ' ' + user.lastname;
 
-            self.debug('User data updated successfully');
+            this.debug('User data updated successfully');
             callback();
         });
     }
@@ -128,9 +126,8 @@ class Notifier {
     }
 
     requestPermissionAndNotify (message) {
-        const self = this;
-        Notification.requestPermission(function () {
-            self.notify(message);
+        Notification.requestPermission(() => {
+            this.notify(message);
         });
     }
 
@@ -160,19 +157,16 @@ class App {
 
         this.debug = this.api.debug;
         this.firstRun = true;
-
-        this.initEvents();
-        this.start();
     }
 
     start () {
-        const self = this;
-        this.api.init(function (error) {
+        this.initEvents();
+        this.api.init(error => {
             if (error) {
-                return setTimeout(() => self.checkSettings(self.start.bind(self)), 5000);
+                return setTimeout(() => this.checkSettings(this.start.bind(this)), 5000);
             }
 
-            self.startTimers();
+            this.startTimers();
         });
     }
 
@@ -187,19 +181,17 @@ class App {
             this.aaCount = 0;
         }
 
-        const self = this;
-
-        this.api.getAAIssues(function (error, data) {
+        this.api.getAAIssues((error, data) => {
             if (error) {
                 return;
             }
 
             const total = data.total_count;
 
-            if (total !== self.aaCount || self.firstRun) {
-                self.firstRun = false;
-                if (total > self.aaCount) {
-                    self.notifier.notifyAboutNewAAIssues(total - self.aaCount);
+            if (total !== this.aaCount || this.firstRun) {
+                this.firstRun = false;
+                if (total > this.aaCount) {
+                    this.notifier.notifyAboutNewAAIssues(total - this.aaCount);
                 }
 
                 chrome.browserAction.setBadgeText({text: '' + total});
@@ -212,8 +204,8 @@ class App {
                 chrome.browserAction.setBadgeText({text: ''});
             }
 
-            self.debug(`AA: ${total}, New: ${total - self.aaCount}`);
-            self.aaCount = total;
+            this.debug(`AA: ${total}, New: ${total - this.aaCount}`);
+            this.aaCount = total;
         });
     }
 
@@ -223,7 +215,7 @@ class App {
         chrome.storage.sync.get([
             'host',
             'apikey'
-        ], function (items) {
+        ], items => {
             if (settings.host !== items.host || settings.apikey !== items.apikey) {
                 api.updateConfig(items);
             }
@@ -244,9 +236,8 @@ class App {
     }
 
     initEvents () {
-        const self = this;
-        chrome.browserAction.onClicked.addListener(function () {
-            self.openAAIssues();
+        chrome.browserAction.onClicked.addListener(() => {
+            this.openAAIssues();
         });
     }
 }
@@ -254,7 +245,6 @@ class App {
 class PageModifier {
     constructor (config) {
         this.config = config;
-        this.subscribe();
     }
 
     subscribe () {
@@ -269,26 +259,59 @@ class PageModifier {
     }
 }
 
+class SettingWatcher {
+    constructor () {
+        this.listeners = [];
+        this.cached = '';
+        this.interval = setInterval(this.check.bind(this), 30000);
+        this.check();
+    }
+
+    onChangeOnce (fn) {
+        this.listeners.push(fn);
+    }
+
+    check () {
+        chrome.storage.sync.get([
+            'host',
+            'apikey',
+            'count',
+            'issueFix'
+        ], settings => {
+            const serialized = JSON.stringify(settings);
+
+            if (serialized !== this.cached) {
+                this.cached = serialized;
+                this.applyChange(settings);
+            }
+        });
+    }
+
+    applyChange (settings) {
+        const listeners = this.listeners.splice(0);
+        this.listeners = [];
+        listeners.forEach(listener => listener(settings));
+    }
+}
+
 function starter () {
     chrome.browserAction.setBadgeBackgroundColor({color: [208, 0, 24, 255]});
-    chrome.storage.sync.get([
-        'host',
-        'apikey',
-        'count',
-        'issueFix'
-    ], function (items) {
-        if (items.host && items.apikey) {
-            const app = new App(items, true);
 
-            if (items.issueFix) {
-                const pageModifier = new PageModifier(items); 
+    const sWatcher = new SettingWatcher();
+
+    sWatcher.onChangeOnce(settings => {
+        if (settings.host && settings.apikey) {
+            const app = new App(settings, true);
+
+            if (settings.issueFix) {
+                const pageModifier = new PageModifier(settings);
+                pageModifier.subscribe();
             }
-        } else {
-            setTimeout(starter, 10000);
+
+            app.start();
+            sWatcher.onChangeOnce(() => location.reload());
         }
     });
-
-    
 }
 
 starter();
